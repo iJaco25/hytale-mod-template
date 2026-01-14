@@ -18,9 +18,9 @@ You need to place `HytaleServer.jar` and `Assets.zip` in the `libs/` folder
 *Best for quick testing*: you'll need to recopy when udates drop:
 Default locations:
 
-**Windows**: `%appdata%\Hytale\install\release\package\game\latest`
-**Linux**: `$XDG_DATA_HOME/Hytale/install/release/package/game/latest`
-**MacOS**: `~/Application Support/Hytale/install/release/package/game/latest`
+- **Windows**: `%appdata%\Hytale\install\release\package\game\latest`
+- **Linux**: `$XDG_DATA_HOME/Hytale/install/release/package/game/latest`
+- **MacOS**: `~/Application Support/Hytale/install/release/package/game/latest`
 
 Copy `HytaleServer.jar` and `Assets.zip` to the `libs/` folder.
 
