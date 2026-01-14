@@ -49,5 +49,5 @@ $ ./gradlew runServer
 1. Rename `com.example.demo` (inside `app/src/main/java`) to you package path
 2. Update package declaration in `Plugin.java`
 3. Update `Main` field in `app/src/main/resources/manifest.json`
-4. Update `pluginGroup` inside `gradle.properties`
+4. Update `pluginGroup` and `pluginName` inside `gradle.properties`
 

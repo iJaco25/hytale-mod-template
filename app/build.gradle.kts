@@ -3,6 +3,11 @@ plugins {
     id("com.gradleup.shadow") version "9.3.1"
 }
 
+tasks.jar {
+    archiveBaseName.set(project.property("pluginName") as String)
+    archiveVersion.set(project.property("pluginVersion") as String)
+}
+
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(25))
@@ -101,5 +106,7 @@ tasks {
         classpath = files(runFolder.resolve("HytaleServer.jar"))
         args = listOf("--assets", "Assets.zip")
         standardInput = System.`in`
+
+        systemProperty("org.gradle.console", "plain")
     }
 }
