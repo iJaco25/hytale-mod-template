@@ -31,6 +31,7 @@ public class ItemCommand extends AbstractPlayerCommand {
             ItemStack mainItem = player.getInventory().getItemInHand() ;
             if (mainItem != null ){
                 double maxDurability = mainItem.getMaxDurability();
+
                 player.sendMessage(Message.raw(mainItem.toString()));
             }
         }
