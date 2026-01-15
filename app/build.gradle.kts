@@ -16,7 +16,14 @@ java {
     targetCompatibility = JavaVersion.VERSION_25
 }
 
-version = "1.0.0"
+val pluginName: String by project
+val pluginVersion: String by project
+val pluginGroup: String by project
+val pluginDescription: String by project
+val pluginMain: String by project
+
+version = pluginVersion
+group = pluginGroup
 
 repositories {
     mavenCentral()
@@ -47,9 +54,48 @@ tasks {
         enabled = false
     }
 
+    val processManifest by registering {
+        group = "hytale"
+        description = "Processes manifest.json from generated/ and copies to resources/"
+
+        val generatedManifestFile = file("src/main/generated/manifest.json")
+        val resourcesManifestFile = file("src/main/resources/manifest.json")
+
+        inputs.file(generatedManifestFile)
+        outputs.file(resourcesManifestFile)
+
+        doLast {
+            if (!generatedManifestFile.exists()) {
+                throw GradleException("Source manifest not found at ${generatedManifestFile.absolutePath}")
+            }
+
+            val slurper = JsonSlurper()
+            val manifestJson = slurper.parse(generatedManifestFile) as Map<String, Any>
+
+            val processedManifest = processJsonVariables(manifestJson, mapOf(
+                "pluginName" to pluginName,
+                "pluginVersion" to pluginVersion,
+                "pluginGroup" to pluginGroup,
+                "pluginDescription" to pluginDescription,
+                "pluginMain" to pluginMain
+            ))
+
+            resourcesManifestFile.parentFile.mkdirs()
+
+            val jsonBuilder = JsonBuilder(processedManifest)
+            resourcesManifestFile.writeText(jsonBuilder.toPrettyString())
+
+            logger.lifecycle("Processed manifest.json: generated/ -> src/main/resources/")
+        }
+    }
+
+    processResources {
+        dependsOn(processManifest)
+    }
+
     shadowJar {
-        archiveBaseName.set(project.property("pluginName") as String)
-        archiveVersion.set(project.property("pluginVersion") as String)
+        archiveBaseName.set(pluginName)
+        archiveVersion.set(pluginVersion)
         archiveClassifier.set("")
         mergeServiceFiles()
 
@@ -60,7 +106,7 @@ tasks {
     val buildRelease by registering {
         dependsOn(shadowJarTask)
         group = "hytale"
-        description = "Builds the final .jar file for distribution (combined assets + code)"
+        description = "Builds the final .jar file for distribution"
 
         val releaseFileProvider = shadowJarTask.flatMap { it.archiveFile }
 
@@ -68,7 +114,7 @@ tasks {
             logger.lifecycle("===========================================")
             logger.lifecycle(" Build Success!")
             logger.lifecycle(" Release File: ${releaseFileProvider.get().asFile.absolutePath}")
-            logger.lifecycle(" (Combined: Java classes + Resources)")
+            logger.lifecycle(" (Merged: Java classes + Resources)")
             logger.lifecycle("===========================================")
         }
     }
@@ -90,9 +136,9 @@ tasks {
     val installDevCode by registering(Jar::class) {
         dependsOn("classes")
         group = "hytale"
-        description = "Creates a JAR with only Java classes (no resources)"
+        description = "Creates a JAR with only Java classes (no assets)"
 
-        archiveBaseName.set("${project.property("pluginName") as String}-dev")
+        archiveBaseName.set("${pluginName}-dev")
         archiveClassifier.set("code-only")
 
         from(sourceSets.main.get().output.classesDirs)
@@ -100,7 +146,6 @@ tasks {
         sourceSets.main.get().output.resourcesDir?.let {
             from(it) {
                 include("manifest.json")
-                include("Common")
             }
         }
 
@@ -112,27 +157,24 @@ tasks {
         group = "hytale"
         description = "Installs assets as a symlinked folder"
 
-        val pluginName = project.property("pluginName") as String
         val runDirPath = rootProject.file("run")
         val resourcesSrcPath = file("src/main/resources")
 
         doLast {
             val runDir = runDirPath
             val modsDir = runDir.resolve("mods")
-            val assetsDir = modsDir.resolve("${pluginName}-assets")
+            val assetsDir = modsDir.resolve("${pluginName}.assets")
 
             val resourcesSrc = resourcesSrcPath
 
-            if (assetsDir.exists()) assetsDir.deleteRecursively()
             assetsDir.mkdirs()
-
             if (resourcesSrc.exists())
             {
                 val manifestData = mapOf(
-                    "Group" to pluginName,
-                    "Name" to "$pluginName-asset",
-                    "Version" to "1.0.0",
-                    "Description" to "",
+                    "Group" to pluginGroup,
+                    "Name" to "assets",
+                    "Version" to pluginVersion,
+                    "Description" to pluginDescription,
                     "Authors" to emptyList<String>(),
                     "Website" to "",
                     "Dependencies" to emptyMap<String, String>(),
@@ -144,26 +186,29 @@ tasks {
                 )
 
                 val assetsManifest = manifestData.toMutableMap()
-                assetsManifest["IncludesAssetPack"] = true
-
                 val assetsManifestFile = assetsDir.resolve("manifest.json")
                 val jsonBuilder = JsonBuilder(assetsManifest)
                 assetsManifestFile.writeText(jsonBuilder.toPrettyString())
-                logger.lifecycle("Created assets manifest.json with IncludesAssetPack = true")
+                logger.lifecycle("Created assets manifest.json")
 
-                listOf("Server").forEach { folderName ->
-                    val sourceFolder = resourcesSrc.resolve(folderName)
-                    if (sourceFolder.exists() && sourceFolder.isDirectory) {
-                        val targetFolder = assetsDir.resolve(folderName)
-                        try {
-                            Files.createSymbolicLink(targetFolder.toPath(), sourceFolder.toPath())
-                            logger.lifecycle("Symlinked folder: $folderName")
-                        } catch (e: Exception) {
-                            logger.warn("Could not symlink $folderName folder, copying instead.\n${e.message}")
-                            sourceFolder.copyRecursively(targetFolder, overwrite = true)
-                        }
+                val commonSourceFolder = resourcesSrc.resolve("Common")
+                if (commonSourceFolder.exists() && commonSourceFolder.isDirectory) {
+                    val commonTargetFolder = assetsDir.resolve("Common")
+                    commonSourceFolder.copyRecursively(commonTargetFolder, overwrite = true)
+                    logger.lifecycle("Copied folder: Common")
+                }
+
+                val serverSourceFolder = resourcesSrc.resolve("Server")
+                if (serverSourceFolder.exists() && serverSourceFolder.isDirectory) {
+                    val serverTargetFolder = assetsDir.resolve("Server")
+                    try {
+                        Files.createSymbolicLink(serverTargetFolder.toPath(), serverSourceFolder.toPath())
+                        logger.lifecycle("Symlinked folder: Server")
+                    } catch (e: Exception) {
+                        logger.warn("Could not symlink Server folder \n${e.message}")
                     }
                 }
+
                 logger.lifecycle("Assets installed to: ${assetsDir.absolutePath}")
             } else
             {
@@ -177,15 +222,13 @@ tasks {
         group = "hytale"
         description = "Installs dev mod (code JAR + symlinked assets folder)"
 
-        val pluginName = project.property("pluginName") as String
-
         doLast {
             logger.lifecycle("===========================================")
             logger.lifecycle(" Dev Installation Complete!")
             logger.lifecycle(" Code JAR: run/mods/${pluginName}-dev-code-only.jar")
-            logger.lifecycle("   - Contains: manifest.json + compiled classes")
-            logger.lifecycle(" Assets: run/mods/${pluginName}-assets/ (symlinked)")
-            logger.lifecycle("   - Contains: manifest.json (IncludesAssetPack=true) + all resources")
+            logger.lifecycle("   - Contains: compiled classes")
+            logger.lifecycle(" Assets: run/mods/${pluginName}.assets/")
+            logger.lifecycle("   - Contains: all resources")
             logger.lifecycle("===========================================")
         }
     }
@@ -206,5 +249,27 @@ tasks {
         )
         standardInput = System.`in`
         systemProperty("org.gradle.console", "plain")
+    }
+}
+
+fun processJsonVariables(obj: Any?, variables: Map<String, String>): Any? {
+    return when (obj) {
+        is Map<*, *> -> {
+            obj.entries.associate { (key, value) ->
+                key to processJsonVariables(value, variables)
+            }
+        }
+        is List<*> -> {
+            obj.map { processJsonVariables(it, variables) }
+        }
+        is String -> {
+            var result: String = obj
+            variables.forEach { (varKey, varValue) ->
+                result = result.replace("\$$varKey", varValue)
+                result = result.replace("\${$varKey}", varValue)
+            }
+            result
+        }
+        else -> obj
     }
 }
