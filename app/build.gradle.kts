@@ -67,7 +67,6 @@ if (!file(hytaleAssetsZip).exists()) {
 
 dependencies {
     compileOnly(files(hytaleServerJar))
-    compileOnly("com.google.guava:guava:33.4.6-jre")
 }
 
 abstract class ProcessManifestTask : DefaultTask() {
